@@ -49,19 +49,18 @@ def send_msg_and_receive(msg, sock):
 
 
 def main():
-    # Read a file. Pack with headers, unpack, write back to a file.
-    # Let the file be an executable that executes ls. Goal: To see if pack and unpack can get back executable data.
-    # Put that in a new file, manually chmod to 777 and execute ./exec1 on command line after this program runs.
     f = open("./exec")
     file_contents = f.read()
-    raw_pkt = pack('iHH' + str(len(file_contents)) + 's', 6, 0b10010110, 0b1010101010101010, file_contents)
-    #print raw_pkt
-    unpacked_pkt = unpack('iHH' + str(len(file_contents)) + 's', raw_pkt) + (False,)
+    print len(file_contents)
+    # The way pack works is that we put the format as the first argument. Here, len(file_contents) is 8608.
+    # So, 'ilH8608s' is the format specifier. i for Integer (4 bytes), H for short (2 bytes), H for short (2 bytes)
+    # Data length is 8608, but length of raw_pkt below is 8616, which is 8 more than the data length.
+    raw_pkt = pack('iHH' + str(len(file_contents)) + 's', 6, 0b1010110101110100, 0b1010101010101010, file_contents)
+    print len(raw_pkt)
+    unpacked_pkt = unpack('iHH' + str(len(file_contents)) + 's', raw_pkt)
     #print unpacked_pkt
-    f1 = open("./exec1", "w+")
     print type(unpacked_pkt)
-    f1.write(unpacked_pkt[3])
-
+    print len(unpacked_pkt[3])
         
 
 if __name__ == "__main__":
