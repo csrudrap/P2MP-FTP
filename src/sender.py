@@ -57,7 +57,7 @@ def all_ips(ips):
 
 def ftp_init(ips):
     for i in ips:
-        receivers[i] = 0
+        receivers[i] = False
     global buf
     buf = ""
     global timer_expired
@@ -67,20 +67,44 @@ def ftp_init(ips):
 
 
 def stop_and_wait_worker(ip, is_last_byte):
-    # create_socket_and_send()
     # while timer_expired is false, try to recv bytes (4096, say)
     # process_ack() if ack is received. That function simply sets the value in receivers[ip] to 1.
-    # if timer_expired is true and ack isn't received,      
+    # if timer_expired is true and ack isn't received, 
+
+
+    # Send the segment to the receiver. 
+    # If data is not received, keep trying while timer_expired is false.
+    # If ack is incorrectly received, do not update the receiver dictionary, simply return.
+
+
+    data_received = False
+    sock = create_socket(ip, 66500)
+    sock.sendall(build_segment(is_last_byte))
+    while data_received == False:
+        try:
+            ack = sock.recv(4096)
+            data_received = True
+            if is_correctly_received(ack):
+                update_receiver(ip)
+        except error:
+            pass
+        
+     
 
 
 def send_data(is_last_byte):
     # Start timer
     # Spawn threads for each IP in receivers.
     # Wait for each thread to finish, call join.
-    # Then, set the buffer to "" and set receivers[i] to 0 for all receivers.
     timer.start()
-    for i in receivers:
-        threading.Thread(target=stop_and_wait_worker, args=(i, is_last_byte,)).start()
+    recv_threads = []
+    for i in range(len(receivers.keys())):
+        if receivers[i] == False:
+            new_thread = threading.Thread(target=stop_and_wait_worker, args=(receivers.keys()[i], is_last_byte,))
+            new_thread.start()
+            recv_threads.append(new_thread)
+    for i in recv_threads:
+        i.join()
     # JOIN.
     
 
@@ -91,8 +115,21 @@ def stop_and_wait(data, is_last_byte):
     if len(buf) == mss:
         # Buffer is fully filled up.
         # Send the buffer over to the receivers
-        send_data(is_last_byte)
-            
+        current_segment_done = False
+        while current_segment_done == False:
+            current_segment_done = send_data(is_last_byte)
+        prepare_next_segment()
+                
+
+def prepare_next_segment():
+    buf = ""
+    if timer.is_alive():
+        timer.stop()
+        print "Timer should not have been active."  # Change this to something better.
+    timer = Timer(0.2, update_timer)
+    for i in receivers.keys():
+        receivers[i] = False
+        
 
 # To-Do: Doc string. 
 # file_contents: String, ips: list of IP addresses as strings.
