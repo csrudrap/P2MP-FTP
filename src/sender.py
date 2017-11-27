@@ -172,7 +172,7 @@ def stop_and_wait(data, is_last_byte):
     #global timer
     #print "timer in stop_and_wait", timer.is_alive()
     buf += data
-    if len(buf) == mss:
+    if len(buf) == mss or is_last_byte:
         # Buffer is fully filled up.
         # Send the buffer over to the receivers
         current_segment_done = False
