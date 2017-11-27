@@ -23,9 +23,11 @@ def build_segment_ack(data):
     packetType = 0b1010101010101010
     return struct.pack('iHH', seqNum, dataACK, packetType)
 
+
 def carry_around_add(a, b):
     c = a + b
     return (c & 0xffff) + (c >> 16)
+
 
 def verify_checksum(msg):
     return True # FIX THIS

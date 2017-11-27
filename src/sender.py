@@ -51,7 +51,7 @@ last_seg_type = 0b0101010111111111
 timer = None
 timer_expired = True
 seq = 0
-ack_identifier = 0b1010101000000000
+ack_identifier = 0b1010101010101010
 
 
 def all_ips(ips):
@@ -78,13 +78,12 @@ def ftp_init(ips):
     global timer
     global timer_expired
     for i in ips:
-        print "I IS: ", i
         receivers[i] = False
     buf = ""
     timer_expired = True
     timer = Timer(0.8, update_timer)
     if timer.is_alive():
-        timer.stop()
+        timer.cancel()
     seq = 0
 
 
@@ -97,8 +96,6 @@ def build_segment(is_last_byte):
     
     data_identifier = last_seg_type if is_last_byte else seg_type
     checksum = calculate_checksum()
-    s = struct.pack('iHH' + str(len(buf)) + 's', seq, checksum, data_identifier, buf)
-    print "BUILDING SEGMENT: BUF, S", len(buf), len(s)
     return struct.pack('iHH' + str(len(buf)) + 's', seq, checksum, data_identifier, buf)
 
 
@@ -112,16 +109,13 @@ def stop_and_wait_worker(ip, is_last_byte):
     data_received = False
     sock = create_socket_and_connect()
     sock.sendto(build_segment(is_last_byte), (ip, 65530))
-    print "AFTER SENDTO", build_segment(is_last_byte)
     print timer_expired == False and data_received == False
     while timer_expired == False and data_received == False:
         try:
             ack = sock.recvfrom(4096)
-            print "RECEIVING?"
             if ack is not None:
                 data_received = True
-            print "ACK", ack[0]
-            unpacked_ack = struct.unpack('iHH', ack)
+            unpacked_ack = struct.unpack('iHH', ack[0])
             if is_ack_correctly_received(unpacked_ack):  # Check if data identifier is correct, checksum is correct.
                 receivers[ip] = True
         except Exception as e:
@@ -143,6 +137,9 @@ def send_data(is_last_byte):
     global timer
     global receivers
     global timer_expired
+    if timer.is_alive():
+        timer.cancel()
+    timer = Timer(0.8, update_timer)
     timer.start()
     timer_expired = False
     recv_threads = []
@@ -154,10 +151,15 @@ def send_data(is_last_byte):
             recv_threads.append(new_thread)
     for i in recv_threads:
         i.join()
+    print "AFTER JOIN"
     # If any of the receivers haven't sent ACKs yet, return False so that this function can be called again.
+    print receivers
     for i in receivers.keys():
         if receivers[i] == False:
             return False
+    if timer.is_alive():
+        timer.cancel()
+        timer = Timer(0.8, update_timer)
     return True
 
 
@@ -189,8 +191,7 @@ def prepare_next_segment():
     global receivers
     buf = ""
     if timer.is_alive():
-        timer.stop()
-        print "Timer should not have been active."  # Change this to something better.
+        timer.cancel()
     timer = Timer(0.8, update_timer)
     for i in receivers.keys():
         receivers[i] = False
