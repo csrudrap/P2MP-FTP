@@ -120,11 +120,12 @@ def stop_and_wait_worker(ip, is_last_byte):
             print "RECEIVING?"
             if ack is not None:
                 data_received = True
-            unpacked_ack = unpack('iHH', ack)
+            print "ACK", ack[0]
+            unpacked_ack = struct.unpack('iHH', ack)
             if is_ack_correctly_received(unpacked_ack):  # Check if data identifier is correct, checksum is correct.
                 receivers[ip] = True
-        except error:
-            print "Error in sock.recv", error  # What do we put here?
+        except Exception as e:
+            print "Error in sock.recvfrom", e  # What do we put here?
      
 
 def is_ack_correctly_received(ack):

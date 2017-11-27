@@ -6,8 +6,10 @@ import socket
 import os
 import sys
 
-cur_seq = -1 # this is a global value which keeps record of the current seq num to prevent out-of-order packets.
+cur_seq = -1 # is a global value which keeps record of the current seq num to prevent out-of-order packets.
 BUFFER_SIZE = 8192 # Arbitrarily chosen maximum limit.
+buf = ""
+
 #struct segmentACK{
 #	int seqNum[32] # sequence number of the packet
 #	char dataACK[16] # data field that is all zeroes
@@ -16,10 +18,9 @@ BUFFER_SIZE = 8192 # Arbitrarily chosen maximum limit.
 #data = "45 00 00 47 73 88 40 00 40 06 a2 c4 83 9f 0e 85 83 9f 0e a1" # test data
 
 def build_segment_ack(data):
-    seqNum = data[0];
-    dataACK = "0000000000000000"
-    packetType = "1010101010101010"    
-    print struct.pack('iHH', seqNum, dataACK, packetType)
+    seqNum = data[0]
+    dataACK = 0b0000000000000000
+    packetType = 0b1010101010101010
     return struct.pack('iHH', seqNum, dataACK, packetType)
 
 def carry_around_add(a, b):
@@ -27,6 +28,7 @@ def carry_around_add(a, b):
     return (c & 0xffff) + (c >> 16)
 
 def verify_checksum(msg):
+    return True # FIX THIS
     s = 0
     for i in range(0, len(msg), 2):
         w = ord(msg[i]) + (ord(msg[i+1]) << 8)
@@ -45,7 +47,7 @@ def verify_checksum(msg):
 #print "Checksum: 0x%04x" % calculateChecksum(data)
 
 def dropSegment(data, p): # drop packet according to a probability p - here p is between 0 and 1
-    return False
+    return False    # FIX THIS
     r = random.uniform(0, 1)
     if r <= p:
         print "Packet loss, sequence number = {}".format(data[0])
@@ -86,8 +88,9 @@ def shutdown_and_close(sock):
         print e.message, "Couldn't close the socket"
 
 
-def process_data(raw_data, p):
+def process_data(sock, raw_data, p, addr):
     #To-Do: Find the size in a better way.
+    global cur_seq
     n = len(raw_data) - 8
     data = struct.unpack('iHH' + str(n) + 's', raw_data) # data is a tuple
     if not dropSegment(data, p):
@@ -99,8 +102,15 @@ def process_data(raw_data, p):
             if not verify_checksum(data):
                 print "Checksum invalid, discarding segment for seq number {}".format(data[0])
             else:
-                build_segment_ack(data)
+                append_to_file(data[3])
+                seg = build_segment_ack(data)
+                sock.sendto(build_segment_ack(data), addr)
+                cur_seq += 1
 
+
+def append_to_file(data):
+    global buf
+    buf += data
 
 def ftp_recv(port, p):
     sock = create_and_bind_socket(port)
@@ -111,8 +121,16 @@ def ftp_recv(port, p):
         if not data:
             continue
         print "Received data:%s", data
-        process_data(data, p)
+        process_data(sock, data, p, addr)
+        if is_last_segment(data):
+            break
         
+
+def is_last_segment(data):
+    n = len(data) - 8
+    unpacked_data = struct.unpack('iHH' + str(n) + 's', data) # unpacked_data is a tuple
+    data_id = unpacked_data[2]
+    return data_id == 0b0101010111111111
 
 #drop packet according to the probability p which is read from the command line
 
@@ -127,7 +145,10 @@ def ftp_recv(port, p):
 def main():
     port = 65530
     p = 0.5
+    global cur_seq
+    cur_seq = -1
     ftp_recv(port, p)
+    print buf
     
 
 if __name__ == "__main__":
