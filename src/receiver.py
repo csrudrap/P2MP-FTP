@@ -6,7 +6,7 @@ import socket
 import os
 import sys
 
-cur_seq = 0 # this is a global value which keeps record of the current seq num to prevent out-of-order packets.
+cur_seq = -1 # this is a global value which keeps record of the current seq num to prevent out-of-order packets.
 BUFFER_SIZE = 8192 # Arbitrarily chosen maximum limit.
 #struct segmentACK{
 #	int seqNum[32] # sequence number of the packet
@@ -45,6 +45,7 @@ def verify_checksum(msg):
 #print "Checksum: 0x%04x" % calculateChecksum(data)
 
 def dropSegment(data, p): # drop packet according to a probability p - here p is between 0 and 1
+    return False
     r = random.uniform(0, 1)
     if r <= p:
         print "Packet loss, sequence number = {}".format(data[0])
@@ -87,8 +88,8 @@ def shutdown_and_close(sock):
 
 def process_data(raw_data, p):
     #To-Do: Find the size in a better way.
-    n = len(raw_data) - 64
-    data = struct.unpack('iHH' + n + 's', raw_data) # data is a tuple
+    n = len(raw_data) - 8
+    data = struct.unpack('iHH' + str(n) + 's', raw_data) # data is a tuple
     if not dropSegment(data, p):
         # Retain the segment, process it.
         # Check if data has 4 fields at least.
@@ -101,7 +102,7 @@ def process_data(raw_data, p):
                 build_segment_ack(data)
 
 
-def ftp_recv(port):
+def ftp_recv(port, p):
     sock = create_and_bind_socket(port)
     while True:
         data, addr = sock.recvfrom(BUFFER_SIZE)
@@ -110,7 +111,7 @@ def ftp_recv(port):
         if not data:
             continue
         print "Received data:%s", data
-        process_data(data)
+        process_data(data, p)
         
 
 #drop packet according to the probability p which is read from the command line
@@ -125,7 +126,8 @@ def ftp_recv(port):
 
 def main():
     port = 65530
-    ftp_recv(port)
+    p = 0.5
+    ftp_recv(port, p)
     
 
 if __name__ == "__main__":

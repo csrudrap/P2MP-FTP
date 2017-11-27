@@ -97,6 +97,8 @@ def build_segment(is_last_byte):
     
     data_identifier = last_seg_type if is_last_byte else seg_type
     checksum = calculate_checksum()
+    s = struct.pack('iHH' + str(len(buf)) + 's', seq, checksum, data_identifier, buf)
+    print "BUILDING SEGMENT: BUF, S", len(buf), len(s)
     return struct.pack('iHH' + str(len(buf)) + 's', seq, checksum, data_identifier, buf)
 
 
