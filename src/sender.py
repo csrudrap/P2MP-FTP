@@ -40,6 +40,7 @@
 import socket
 import sys
 import struct
+import threading
 from threading import Timer
 
 receivers = {}
@@ -65,8 +66,8 @@ def calculate_checksum():
 
 def create_socket_and_connect():
     try:
-        sock = socket(AF_INET, SOCK_DGRAM)
-    except error:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    except Exception as e:
         print "Socket could not be created"
         sys.exit(1)
     return sock
@@ -77,10 +78,13 @@ def ftp_init(ips):
     global timer
     global timer_expired
     for i in ips:
+        print "I IS: ", i
         receivers[i] = False
     buf = ""
     timer_expired = True
-    timer = Timer(0.2, update_timer)
+    timer = Timer(0.8, update_timer)
+    if timer.is_alive():
+        timer.stop()
     seq = 0
 
 
@@ -103,13 +107,15 @@ def stop_and_wait_worker(ip, is_last_byte):
     
     global timer_expired
     global receivers
-
     data_received = False
     sock = create_socket_and_connect()
-    sock.sendto(build_segment(is_last_byte), (ip, 65500))
+    sock.sendto(build_segment(is_last_byte), (ip, 65530))
+    print "AFTER SENDTO", build_segment(is_last_byte)
+    print timer_expired == False and data_received == False
     while timer_expired == False and data_received == False:
         try:
             ack = sock.recvfrom(4096)
+            print "RECEIVING?"
             if ack is not None:
                 data_received = True
             unpacked_ack = unpack('iHH', ack)
@@ -137,8 +143,9 @@ def send_data(is_last_byte):
     timer.start()
     timer_expired = False
     recv_threads = []
+    print len(receivers.keys())
     for i in range(len(receivers.keys())):
-        if receivers[i] == False:
+        if receivers[receivers.keys()[i]] == False:
             new_thread = threading.Thread(target=stop_and_wait_worker, args=(receivers.keys()[i], is_last_byte,))
             new_thread.start()
             recv_threads.append(new_thread)
@@ -157,6 +164,8 @@ def stop_and_wait(data, is_last_byte):
     global buf
     global mss
     global seq
+    #global timer
+    #print "timer in stop_and_wait", timer.is_alive()
     buf += data
     if len(buf) == mss:
         # Buffer is fully filled up.
@@ -179,7 +188,7 @@ def prepare_next_segment():
     if timer.is_alive():
         timer.stop()
         print "Timer should not have been active."  # Change this to something better.
-    timer = Timer(0.2, update_timer)
+    timer = Timer(0.8, update_timer)
     for i in receivers.keys():
         receivers[i] = False
        
@@ -188,6 +197,7 @@ def update_timer():
     # set global timer_expired value to True. 
     global timer_expired
     timer_expired = True
+    print "Timer expired"
 
 # To-Do: Doc string. 
 # file_contents: String, ips: list of IP addresses as strings.
@@ -197,7 +207,7 @@ def rdt_send(file_contents, ips):
         print "IP addresses of receivers incorrect. Please check the file and try again."
         sys.exit(1)
     ftp_init(ips)
-    for i in range(len(file_contents):
+    for i in range(len(file_contents)):
         if i == len(file_contents) - 1:
             stop_and_wait(file_contents[i], True)
         else:
@@ -208,12 +218,12 @@ def main():
     if not sys.argv[2] or '../' in sys.argv[2]:
         print "Please input the filename correctly."
         sys.exit(1)
-    f = open("../files/" + sys.argv[2], "r")
+    f = open("../files/" + sys.argv[1], "r")
     file_contents = f.read()
     # To-Do: Check if the ips.txt file exists and exit if not.
-    ips = open("../files/ips.txt", "r").read().split('\n')
+    ips = open("../files/ips.txt", "r").read().split('\n')[:-1]
     global mss
-    mss = int(sys.argv[3])
+    mss = int(sys.argv[2])
     rdt_send(file_contents, ips)
     
     

@@ -75,7 +75,7 @@ def create_and_bind_socket(port):
 
 def shutdown_and_close(sock):
     try:
-        sock.shutdown(SHUT_RDWR)
+        sock.shutdown(socket.SHUT_RDWR)
         print "Socket shutdown successfully."
     except Exception as e:
         print e.message, "Couldn't shutdown the socket on the server."
