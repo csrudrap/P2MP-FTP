@@ -63,13 +63,12 @@ def calculate_checksum():
     return 0b1010110101110100   # Remove this line and return something valid.
 
 
-def create_socket_and_connect(dest_hostname, dest_port):
+def create_socket_and_connect():
     try:
         sock = socket(AF_INET, SOCK_DGRAM)
     except error:
         print "Socket could not be created"
         sys.exit(1)
-    sock.connect((dest_hostname, dest_port))
     return sock
 
 
@@ -106,11 +105,11 @@ def stop_and_wait_worker(ip, is_last_byte):
     global receivers
 
     data_received = False
-    sock = create_socket_and_connect(ip, 65500)
-    sock.sendall(build_segment(is_last_byte))
+    sock = create_socket_and_connect()
+    sock.sendto(build_segment(is_last_byte), (ip, 65500))
     while timer_expired == False and data_received == False:
         try:
-            ack = sock.recv(4096)
+            ack = sock.recvfrom(4096)
             if ack is not None:
                 data_received = True
             unpacked_ack = unpack('iHH', ack)

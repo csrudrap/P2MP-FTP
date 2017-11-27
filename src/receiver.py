@@ -4,6 +4,7 @@ import random
 import struct
 import socket
 import os
+import sys
 
 cur_seq = 0 # this is a global value which keeps record of the current seq num to prevent out-of-order packets.
 BUFFER_SIZE = 8192 # Arbitrarily chosen maximum limit.
@@ -54,9 +55,9 @@ def dropSegment(data, p): # drop packet according to a probability p - here p is
 
 def create_and_bind_socket(port):
     try:
-        sock = socket.socket(AF_INET, SOCK_DGRAM)
-    except: # Change this line.
-        print "Socket could not be created"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    except Exception as e: # Change this line.
+        print "Socket could not be created", e
         sys.exit(1)
     if sock == None:
         print "Socket is None! Exiting."
@@ -103,11 +104,9 @@ def process_data(raw_data, p):
 def ftp_recv(port):
     sock = create_and_bind_socket(port)
     while True:
-        sock.listen(1)
-        conn, addr = s.accept()
+        data, addr = sock.recvfrom(BUFFER_SIZE)
         print "Got connection from: %s", addr
         # BUFFER_SIZE is the maximum limit on the size of the segment that the server will receive.
-        data = conn.recv(BUFFER_SIZE)
         if not data:
             continue
         print "Received data:%s", data
