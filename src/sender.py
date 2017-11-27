@@ -106,7 +106,7 @@ def stop_and_wait_worker(ip, is_last_byte):
     global receivers
 
     data_received = False
-    sock = create_socket_and_connect(ip, 66500)
+    sock = create_socket_and_connect(ip, 65500)
     sock.sendall(build_segment(is_last_byte))
     while timer_expired == False and data_received == False:
         try:
