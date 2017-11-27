@@ -41,14 +41,16 @@ import socket
 import sys
 import struct
 from threading import Timer
+
 receivers = {}
 mss = 0
 buf = ""
-seg_type = 0b1010101000000000
-last_seg_type = 0b1010101011111111 
+seg_type = 0b0101010100000000
+last_seg_type = 0b0101010111111111 
 timer = None
 timer_expired = True
 seq = 0
+ack_identifier = 0b1010101000000000
 
 
 def all_ips(ips):
@@ -61,7 +63,20 @@ def calculate_checksum():
     return 0b1010110101110100   # Remove this line and return something valid.
 
 
+def create_socket_and_connect(dest_hostname, dest_port):
+    try:
+        sock = socket(AF_INET, SOCK_DGRAM)
+    except error:
+        print "Socket could not be created"
+        sys.exit(1)
+    sock.connect((dest_hostname, dest_port))
+    return sock
+
+
 def ftp_init(ips):
+    global receivers
+    global timer
+    global timer_expired
     for i in ips:
         receivers[i] = False
     buf = ""
@@ -71,40 +86,57 @@ def ftp_init(ips):
 
 
 def build_segment(is_last_byte):
+    global receivers
+    global timer
+    global timer_expired
+    global last_seg_type
+    global seg_type
+    
     data_identifier = last_seg_type if is_last_byte else seg_type
     checksum = calculate_checksum()
     return struct.pack('iHH' + str(len(buf)) + 's', seq, checksum, data_identifier, buf)
 
 
 def stop_and_wait_worker(ip, is_last_byte):
-    # while timer_expired is false, try to recv bytes (4096, say)
-    # process_ack() if ack is received. That function simply sets the value in receivers[ip] to 1.
-    # if timer_expired is true and ack isn't received, 
-
-
     # Send the segment to the receiver. 
     # If data is not received, keep trying while timer_expired is false.
     # If ack is incorrectly received, do not update the receiver dictionary, simply return.
-
+    
+    global timer_expired
+    global receivers
 
     data_received = False
-    sock = create_socket(ip, 66500)
+    sock = create_socket_and_connect(ip, 66500)
     sock.sendall(build_segment(is_last_byte))
-    while data_received == False:
+    while timer_expired == False and data_received == False:
         try:
             ack = sock.recv(4096)
-            data_received = True
-            if is_correctly_received(ack):  # Check if data identifier is correct, checksum is correct.
+            if ack is not None:
+                data_received = True
+            unpacked_ack = unpack('iHH', ack)
+            if is_ack_correctly_received(unpacked_ack):  # Check if data identifier is correct, checksum is correct.
                 receivers[ip] = True
         except error:
-            pass    # What do we put here?
+            print "Error in sock.recv", error  # What do we put here?
      
+
+def is_ack_correctly_received(ack):
+    # Ack is correctly received if the identifier is 1010101000000000.
+    # ack is of type tuple
+    if len(ack) < 3:
+        return False
+    return ack[2] == ack_identifier
+
 
 def send_data(is_last_byte):
     # Start timer
     # Spawn threads for each IP in receivers.
     # Wait for each thread to finish, call join.
+    global timer
+    global receivers
+    global timer_expired
     timer.start()
+    timer_expired = False
     recv_threads = []
     for i in range(len(receivers.keys())):
         if receivers[i] == False:
@@ -117,11 +149,15 @@ def send_data(is_last_byte):
     for i in receivers.keys():
         if receivers[i] == False:
             return False
-    return True 
+    return True
+
 
 # To-Do: Doc string.
 # data: String, is_last_byte: boolean
 def stop_and_wait(data, is_last_byte):
+    global buf
+    global mss
+    global seq
     buf += data
     if len(buf) == mss:
         # Buffer is fully filled up.
@@ -129,11 +165,17 @@ def stop_and_wait(data, is_last_byte):
         current_segment_done = False
         while current_segment_done == False:
             current_segment_done = send_data(is_last_byte)
-        seq += 1
+        if seq == 4294967295: #To-Do: Remove hardcoded value.
+            seq = 0
+        else:
+            seq += 1
         prepare_next_segment()
                 
 
 def prepare_next_segment():
+    global buf
+    global timer
+    global receivers
     buf = ""
     if timer.is_alive():
         timer.stop()
@@ -141,7 +183,12 @@ def prepare_next_segment():
     timer = Timer(0.2, update_timer)
     for i in receivers.keys():
         receivers[i] = False
-        
+       
+
+def update_timer():
+    # set global timer_expired value to True. 
+    global timer_expired
+    timer_expired = True
 
 # To-Do: Doc string. 
 # file_contents: String, ips: list of IP addresses as strings.
