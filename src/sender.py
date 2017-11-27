@@ -48,6 +48,7 @@ seg_type = 0b1010101000000000
 last_seg_type = 0b1010101011111111 
 timer = None
 timer_expired = True
+seq = 0
 
 
 def all_ips(ips):
@@ -55,15 +56,24 @@ def all_ips(ips):
     return True
 
 
+def calculate_checksum():
+    # calculate checksum on buff
+    return 0b1010110101110100   # Remove this line and return something valid.
+
+
 def ftp_init(ips):
     for i in ips:
         receivers[i] = False
-    global buf
     buf = ""
-    global timer_expired
     timer_expired = True
-    global timer
     timer = Timer(0.2, update_timer)
+    seq = 0
+
+
+def build_segment(is_last_byte):
+    data_identifier = last_seg_type if is_last_byte else seg_type
+    checksum = calculate_checksum()
+    return struct.pack('iHH' + str(len(buf)) + 's', seq, checksum, data_identifier, buf)
 
 
 def stop_and_wait_worker(ip, is_last_byte):
@@ -84,13 +94,11 @@ def stop_and_wait_worker(ip, is_last_byte):
         try:
             ack = sock.recv(4096)
             data_received = True
-            if is_correctly_received(ack):
-                update_receiver(ip)
+            if is_correctly_received(ack):  # Check if data identifier is correct, checksum is correct.
+                receivers[ip] = True
         except error:
-            pass
-        
+            pass    # What do we put here?
      
-
 
 def send_data(is_last_byte):
     # Start timer
@@ -105,8 +113,11 @@ def send_data(is_last_byte):
             recv_threads.append(new_thread)
     for i in recv_threads:
         i.join()
-    # JOIN.
-    
+    # If any of the receivers haven't sent ACKs yet, return False so that this function can be called again.
+    for i in receivers.keys():
+        if receivers[i] == False:
+            return False
+    return True 
 
 # To-Do: Doc string.
 # data: String, is_last_byte: boolean
@@ -118,6 +129,7 @@ def stop_and_wait(data, is_last_byte):
         current_segment_done = False
         while current_segment_done == False:
             current_segment_done = send_data(is_last_byte)
+        seq += 1
         prepare_next_segment()
                 
 
@@ -134,7 +146,7 @@ def prepare_next_segment():
 # To-Do: Doc string. 
 # file_contents: String, ips: list of IP addresses as strings.
 def rdt_send(file_contents, ips):
-    # Check if all entries in the 
+    # Check if all entries in the ips list are IP addresses. 
     if not all_ips(ips):
         print "IP addresses of receivers incorrect. Please check the file and try again."
         sys.exit(1)
