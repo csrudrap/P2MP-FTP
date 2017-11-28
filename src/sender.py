@@ -157,7 +157,7 @@ def update_timer():
     global timer_expired
     global seq
     timer_expired = True
-    # print "Timer expired while sending SEQ: {}".format(seq)
+    print "Timeout, sequence number = {}".format(seq)
 
 
 # file_contents: String, ips: list of IP addresses as strings.
