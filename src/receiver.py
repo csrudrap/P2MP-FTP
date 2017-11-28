@@ -151,7 +151,7 @@ def main():
     if len(sys.argv) < 4:
         print "Please input 4 arguments: python receiver.py <FILENAME: STRING> <PROBABILITY: FLOAT BETWEEN 0 and 1> <PORT_NUM: INT>"
         sys.exit(1)
-    filename = sys.argv[1]
+    filename = "../files/" + sys.argv[1]
     p = float(sys.argv[2])
     port = int(sys.argv[3])
     global cur_seq
