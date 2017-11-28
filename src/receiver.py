@@ -10,12 +10,6 @@ cur_seq = -1 # is a global value which keeps record of the current seq num to pr
 BUFFER_SIZE = 8192 # Arbitrarily chosen maximum limit.
 buf = ""
 
-#struct segmentACK{
-#	int seqNum[32] # sequence number of the packet
-#	char dataACK[16] # data field that is all zeroes
-#	char packetType[16] # 10101010101010 - indicating that is an ACK packet
-#}
-#data = "45 00 00 47 73 88 40 00 40 06 a2 c4 83 9f 0e 85 83 9f 0e a1" # test data
 
 def build_segment_ack(data):
     seqNum = data[0]
@@ -30,7 +24,8 @@ def carry_around_add(a, b):
 
 
 def verify_checksum(msg):
-    return True # FIX THIS
+    # Referred from stackoverflow.
+    return True
     s = 0
     for i in range(0, len(msg), 2):
         w = ord(msg[i]) + (ord(msg[i+1]) << 8)
@@ -49,7 +44,6 @@ def verify_checksum(msg):
 #print "Checksum: 0x%04x" % calculateChecksum(data)
 
 def dropSegment(data, p): # drop packet according to a probability p - here p is between 0 and 1
-    #return False    # FIX THIS
     r = random.uniform(0, 1)
     if r <= p:
         print "Packet loss, sequence number = {}".format(data[0])
@@ -91,8 +85,8 @@ def shutdown_and_close(sock):
 
 
 def process_data(sock, raw_data, p, addr):
-    #To-Do: Find the size in a better way.
     global cur_seq
+    # Header length is 4 + 2 + 2 = 8
     n = len(raw_data) - 8
     data = struct.unpack('iHH' + str(n) + 's', raw_data) # data is a tuple
     if not dropSegment(data, p):
@@ -113,6 +107,7 @@ def process_data(sock, raw_data, p, addr):
                 cur_seq += 1
                 return True
     else:
+        # Segment is discarded based on probability.
         return False
 
 
@@ -123,14 +118,16 @@ def append_to_file(data):
 def ftp_recv(port, p):
     sock = create_and_bind_socket(port)
     while True:
-        data, addr = sock.recvfrom(BUFFER_SIZE)
-        print "Got connection from: %s", addr
         # BUFFER_SIZE is the maximum limit on the size of the segment that the server will receive.
+        data, addr = sock.recvfrom(BUFFER_SIZE)
+        # print "Got connection from: %s", addr
         if not data:
             continue
         #print "Received data:%s", data
         ret = process_data(sock, data, p, addr)
+        # ret is True only when the segment is processed correctly and ACK is sent out.
         if is_last_segment(data) and ret:
+            # After last segment is CORRECTLY processed, break out of the while True loop.
             break
         
 
@@ -138,9 +135,9 @@ def is_last_segment(data):
     n = len(data) - 8
     unpacked_data = struct.unpack('iHH' + str(n) + 's', data) # unpacked_data is a tuple
     data_id = unpacked_data[2]
+    # We identify the last segment by 0101010111111111.
     return data_id == 0b0101010111111111
 
-#drop packet according to the probability p which is read from the command line
 
 #once packet is received, read the fields inside the packet, calculate checksum
 # the function should check whether the packet is in sequence
@@ -151,14 +148,17 @@ def is_last_segment(data):
 
 
 def main():
-    port = 65530
-    p = 0.5
+    if len(sys.argv) < 4:
+        print "Please input 4 arguments: python receiver.py <FILENAME: STRING> <PROBABILITY: FLOAT BETWEEN 0 and 1> <PORT_NUM: INT>"
+        sys.exit(1)
+    filename = sys.argv[1]
+    p = float(sys.argv[2])
+    port = int(sys.argv[3])
     global cur_seq
     cur_seq = -1
     ftp_recv(port, p)
-    f = open("new_file.txt", "w")
-    f.write(buf)
-    f.close()
+    with open(filename, "w") as f:
+        f.write(buf)
     
 
 if __name__ == "__main__":
