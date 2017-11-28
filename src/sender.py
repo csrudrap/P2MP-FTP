@@ -1,42 +1,3 @@
-# sender.py has a main function which will be used to call rdt_send(), which will take the entire file string as input and
-# send byte-by-byte to stop_and_wait. If index of the byte is 1 less than the length of file_contents (last byte), send True.
-# Before the stop_and_wait loop in rdt_send, call ftp_init() which will initialize a dictionary with keys as receiver IP
-# addresses and values as 0, indicating that the ACKs haven't come for the first segment. 
-
-# Let there be a global buffer which stop_and_wait will fill byte-by-byte, based on the data it receives. 
-# It will check the size of the buffer after adding a byte, to see if it is equal to MSS. If yes, it will call the send_data
-# function that will spawn one thread per receiver to handle the sending and receiving. It will also start a timer, and the 
-# timer handler function will set a global flag hasTimerExpired to True.
-# Each receiver thread will wait for data if hasTimerExpired is False.
-# The main thread in send_data will wait for all the threads to complete.
-# A scenario in which a thread is context switched out after the if (hasTimerExpired) check can cause problems, as one more 
-# additional send might happen after timeout. Care must be taken to update the dictionary associated with the CURRENT segment
-# After waiting for all threads to complete, the send_data function will initialize the buffer to "" and dictionary to all 0s
-# It will then return control back to stop_and_wait. 
-
-# If this is the last segment (boolean value from rdt_send to stop_and_wait), the header should be changed.
-# The 3rd field is used to distinguish between ACK and data. Use only 8 bits for that.
-
-# rdt_send will receive the entire data; fread is called by the client program and the buffer is passed to rdt_send. 
-# rdt_send runs a loop for each byte and passes each byte to stop_and_wait(). 
-# stop_and_wait(): Function in a separate file.
-#       Keep a global buffer of header + data size. ftp_init(size) can be called by rdt_send() which will send the Segment
-#       size and malloc that much data. If the buffer already exists, free and then allocate. Make this buffer static.
-#       
-#       Read in the values of IP addresses from a file. First line can be the number of receivers n, and the next n lines can
-#       have IP addresses. Build an array and pass the array to the function ftp_init(), in addition to the array size.
-#       Copy this array into a static array of the same size.
-#       In ftp_init, create another array of the same size with all zeroes. Make it static.
-#       
-#       Header is created with the checksum at the beginning, set to all 1s. This will be changed at the end.
-#
-#       When stop_and_wait() is called with a byte of data, a check is done to see if the buffer is completely filled. If not,
-#       the byte is added to the buffer. 
-#       If filled, the data must be sent out.
-#       While sending the data, call a send_current_segment() function, which starts a timer as a separate thread.
-#       It must also create a thread to send data to each receiver.
-
-
 import socket
 import sys
 import struct
@@ -52,11 +13,7 @@ timer = None
 timer_expired = True
 seq = 0
 ack_identifier = 0b1010101010101010
-
-
-def all_ips(ips):
-    # To-Do: Do an IP address check.
-    return True
+port_num = 65530
 
 
 def calculate_checksum():
@@ -78,6 +35,7 @@ def ftp_init(ips):
     global receivers
     global timer
     global timer_expired
+    global seq
     for i in ips:
         receivers[i] = False
     buf = ""
@@ -104,25 +62,23 @@ def stop_and_wait_worker(ip, is_last_byte):
     # Send the segment to the receiver. 
     # If data is not received, keep trying while timer_expired is false.
     # If ack is incorrectly received, do not update the receiver dictionary, simply return.
-    
+     
     global timer_expired
     global receivers
+    global port_num
     data_received = False
     sock = create_socket_and_connect()
-    sock.sendto(build_segment(is_last_byte), (ip, 65530))
-    print timer_expired == False and data_received == False
+    sock.sendto(build_segment(is_last_byte), (ip, port_num))
     while timer_expired == False and data_received == False:
-        print "in the while loop"
         try:
             ack = sock.recvfrom(4096)
-            print "AFTER ACK STMT"
             if ack is not None:
                 data_received = True
             unpacked_ack = struct.unpack('iHH', ack[0])
-            if is_ack_correctly_received(unpacked_ack):  # Check if data identifier is correct, checksum is correct.
+            if is_ack_correctly_received(unpacked_ack):  # Check if the ack received is valid.
                 receivers[ip] = True
         except Exception as e:
-            print "Error in sock.recvfrom", e  # What do we put here?
+            pass    # Socket timeout may occur. Go back to the while loop without printing anything.
      
 
 def is_ack_correctly_received(ack):
@@ -146,7 +102,6 @@ def send_data(is_last_byte):
     timer.start()
     timer_expired = False
     recv_threads = []
-    print len(receivers.keys())
     for i in range(len(receivers.keys())):
         if receivers[receivers.keys()[i]] == False:
             new_thread = threading.Thread(target=stop_and_wait_worker, args=(receivers.keys()[i], is_last_byte,))
@@ -154,10 +109,8 @@ def send_data(is_last_byte):
             recv_threads.append(new_thread)
     for i in recv_threads:
         i.join()
-    print "AFTER JOIN"
-    # If any of the receivers haven't sent ACKs yet, return False so that this function can be called again.
-    print receivers
     for i in receivers.keys():
+    # If any of the receivers haven't sent ACKs yet, return False so that this function can be called again.
         if receivers[i] == False:
             return False
     if timer.is_alive():
@@ -172,17 +125,15 @@ def stop_and_wait(data, is_last_byte):
     global buf
     global mss
     global seq
-    #global timer
-    #print "timer in stop_and_wait", timer.is_alive()
     buf += data
     if len(buf) == mss or is_last_byte:
-        # Buffer is fully filled up.
+        # Buffer is fully filled up or this is the last byte. In the latter case, send although
+        # buf size is less than mss
         # Send the buffer over to the receivers
         current_segment_done = False
         while current_segment_done == False:
             current_segment_done = send_data(is_last_byte)
-            print "Cur segment done?", current_segment_done
-        if seq == 4294967295: #To-Do: Remove hardcoded value.
+        if seq == 4294967295:   # Value of 2 to the power of 32.
             seq = 0
         else:
             seq += 1
@@ -204,35 +155,36 @@ def prepare_next_segment():
 def update_timer():
     # set global timer_expired value to True. 
     global timer_expired
+    global seq
     timer_expired = True
-    print "Timer expired"
+    # print "Timer expired while sending SEQ: {}".format(seq)
 
 
-# To-Do: Doc string. 
 # file_contents: String, ips: list of IP addresses as strings.
-def rdt_send(file_contents, ips):
-    # Check if all entries in the ips list are IP addresses. 
-    if not all_ips(ips):
-        print "IP addresses of receivers incorrect. Please check the file and try again."
-        sys.exit(1)
+def rdt_send(file_contents, ips): 
     ftp_init(ips)
     for i in range(len(file_contents)):
         if i == len(file_contents) - 1:
+            # This is the last byte to be sent.
             stop_and_wait(file_contents[i], True)
         else:
             stop_and_wait(file_contents[i], False)
 
 
 def main():
-    if not sys.argv[2] or '../' in sys.argv[2]:
+    if len(sys.argv) < 4:
+        print "Please input 4 arguments: python sender.py <FILENAME: STRING> <MSS: INT> <PORT_NUM: INT>"
+        sys.exit(1)
+    if not sys.argv[1] or '../' in sys.argv[1]:
         print "Please input the filename correctly."
         sys.exit(1)
     f = open("../files/" + sys.argv[1], "r")
     file_contents = f.read()
-    # To-Do: Check if the ips.txt file exists and exit if not.
     ips = open("../files/ips.txt", "r").read().split('\n')[:-1]
     global mss
     mss = int(sys.argv[2])
+    global port_num
+    port_num = int(sys.argv[3])
     rdt_send(file_contents, ips)
     
     
