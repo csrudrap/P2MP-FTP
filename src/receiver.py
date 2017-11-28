@@ -101,14 +101,19 @@ def process_data(sock, raw_data, p, addr):
         print "SEQ RECVD IS: ", data[0]
         if data[0] != cur_seq + 1:
             print "Segment received not in sequence for seq number {}".format(data[0])
+            return False
         else:
             if not verify_checksum(data):
                 print "Checksum invalid, discarding segment for seq number {}".format(data[0])
+                return False
             else:
                 append_to_file(data[3])
                 seg = build_segment_ack(data)
                 sock.sendto(build_segment_ack(data), addr)
                 cur_seq += 1
+                return True
+    else:
+        return False
 
 
 def append_to_file(data):
@@ -124,8 +129,8 @@ def ftp_recv(port, p):
         if not data:
             continue
         #print "Received data:%s", data
-        process_data(sock, data, p, addr)
-        if is_last_segment(data):
+        ret = process_data(sock, data, p, addr)
+        if is_last_segment(data) and ret:
             break
         
 
