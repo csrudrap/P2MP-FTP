@@ -70,6 +70,7 @@ def create_socket_and_connect():
     except Exception as e:
         print "Socket could not be created"
         sys.exit(1)
+    sock.settimeout(0.1)
     return sock
 
 
@@ -111,8 +112,10 @@ def stop_and_wait_worker(ip, is_last_byte):
     sock.sendto(build_segment(is_last_byte), (ip, 65530))
     print timer_expired == False and data_received == False
     while timer_expired == False and data_received == False:
+        print "in the while loop"
         try:
             ack = sock.recvfrom(4096)
+            print "AFTER ACK STMT"
             if ack is not None:
                 data_received = True
             unpacked_ack = struct.unpack('iHH', ack[0])
@@ -178,6 +181,7 @@ def stop_and_wait(data, is_last_byte):
         current_segment_done = False
         while current_segment_done == False:
             current_segment_done = send_data(is_last_byte)
+            print "Cur segment done?", current_segment_done
         if seq == 4294967295: #To-Do: Remove hardcoded value.
             seq = 0
         else:
@@ -202,6 +206,7 @@ def update_timer():
     global timer_expired
     timer_expired = True
     print "Timer expired"
+
 
 # To-Do: Doc string. 
 # file_contents: String, ips: list of IP addresses as strings.
