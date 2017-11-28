@@ -3,6 +3,8 @@ import sys
 import struct
 import threading
 from threading import Timer
+import time
+
 
 receivers = {}
 mss = 0
@@ -185,8 +187,10 @@ def main():
     mss = int(sys.argv[2])
     global port_num
     port_num = int(sys.argv[3])
+    init_time = time.time()
     rdt_send(file_contents, ips)
-    
+    final_time = time.time()
+    print "Time taken:", final_time - init_time
     
 if __name__ == "__main__":
     main()
