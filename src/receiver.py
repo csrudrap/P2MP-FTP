@@ -98,6 +98,7 @@ def process_data(sock, raw_data, p, addr):
     if not dropSegment(data, p):
         # Retain the segment, process it.
         # Check if data has 4 fields at least.
+        print "SEQ RECVD IS: ", data[0]
         if data[0] != cur_seq + 1:
             print "Segment received not in sequence for seq number {}".format(data[0])
         else:
@@ -122,7 +123,7 @@ def ftp_recv(port, p):
         # BUFFER_SIZE is the maximum limit on the size of the segment that the server will receive.
         if not data:
             continue
-        print "Received data:%s", data
+        #print "Received data:%s", data
         process_data(sock, data, p, addr)
         if is_last_segment(data):
             break
