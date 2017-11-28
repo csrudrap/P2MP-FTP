@@ -49,7 +49,7 @@ def verify_checksum(msg):
 #print "Checksum: 0x%04x" % calculateChecksum(data)
 
 def dropSegment(data, p): # drop packet according to a probability p - here p is between 0 and 1
-    return False    # FIX THIS
+    #return False    # FIX THIS
     r = random.uniform(0, 1)
     if r <= p:
         print "Packet loss, sequence number = {}".format(data[0])
@@ -150,7 +150,9 @@ def main():
     global cur_seq
     cur_seq = -1
     ftp_recv(port, p)
-    print buf
+    f = open("new_file.txt", "w")
+    f.write(buf)
+    f.close()
     
 
 if __name__ == "__main__":
