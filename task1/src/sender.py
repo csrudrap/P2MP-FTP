@@ -182,7 +182,7 @@ def main():
         sys.exit(1)
     f = open("../files/" + sys.argv[1], "r")
     file_contents = f.read()
-    ips = open("../files/ips.txt", "r").read().split('\n')[:2]
+    ips = open("../files/ips.txt", "r").read().split('\n')[:3]
     global mss
     mss = int(sys.argv[2])
     global port_num
