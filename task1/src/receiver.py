@@ -23,27 +23,36 @@ def carry_around_add(a, b):
     return (c & 0xffff) + (c >> 16)
 
 
-def verify_checksum(msg):
+def verify_checksum(s):
+    #print int(bin(int(calculate_checksum(s[3]), 16))[2:], 2), type(calculate_checksum(s[3]))
+    #print s[1], type(s[1])
+    return int(bin(int(calculate_checksum(s[3]), 16))[2:], 2) == s[1]
+    #return calculate_checksum(s[3]) == s[1]
+
+
     # Referred from stackoverflow.
-    return True
-    s = 0
-    for i in range(0, len(msg), 2):
-        w = ord(msg[i]) + (ord(msg[i+1]) << 8)
-        s = carry_around_add(s, w)
-    if (~s & 0xffff) == 0x0000:
-        return True
-    else:
-        return False
+    #return True
+    #s = 0
+    #for i in range(0, len(msg), 2):
+    #    w = ord(msg[i]) + (ord(msg[i+1]) << 8)
+    #    s = carry_around_add(s, w)
+    #if (~s & 0xffff) == 0x0000:
+    #    return True
+    #else:
+    #    return False
 
 
-#data = data.split()
-#data = map(lambda x: int(x,16), data)
-#data = struct.pack("%dB" % len(data), *data)
+# Obtained from https://stackoverflow.com/questions/16822967/need-assistance-in-calculating-checksum
+def calculate_checksum(s):
+    """
+    Calculates checksum for sending commands to the ELKM1.
+    Sums the ASCII character values mod256 and returns
+    the lower byte of the two's complement of that value.
+    """
+    return '%4X' % (-(sum(ord(c) for c in s) % 65536) & 0xFFFF)
 
-#print ' '.join('%02X' % ord(x) for x in data)
-#print "Checksum: 0x%04x" % calculateChecksum(data)
 
-def dropSegment(data, p): # drop packet according to a probability p - here p is between 0 and 1
+def drop_segment(data, p): # drop packet according to a probability p - here p is between 0 and 1
     r = random.uniform(0, 1)
     if r <= p:
         print "Packet loss, sequence number = {}".format(data[0])
@@ -89,7 +98,7 @@ def process_data(sock, raw_data, p, addr):
     # Header length is 4 + 2 + 2 = 8
     n = len(raw_data) - 8
     data = struct.unpack('iHH' + str(n) + 's', raw_data) # data is a tuple
-    if not dropSegment(data, p):
+    if not drop_segment(data, p):
         # Retain the segment, process it.
         # Check if data has 4 fields at least.
         print "SEQ RECVD IS: ", data[0]

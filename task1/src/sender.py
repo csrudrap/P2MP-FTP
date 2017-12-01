@@ -4,7 +4,7 @@ import struct
 import threading
 from threading import Timer
 import time
-
+from receiver import calculate_checksum
 
 receivers = {}
 mss = 0
@@ -16,11 +16,6 @@ timer_expired = True
 seq = 0
 ack_identifier = 0b1010101010101010
 port_num = 65530
-
-
-def calculate_checksum():
-    # calculate checksum on buff
-    return 0b1010110101110100   # Remove this line and return something valid.
 
 
 def create_socket_and_connect():
@@ -56,8 +51,8 @@ def build_segment(is_last_byte):
     global seg_type
     
     data_identifier = last_seg_type if is_last_byte else seg_type
-    checksum = calculate_checksum()
-    return struct.pack('iHH' + str(len(buf)) + 's', seq, checksum, data_identifier, buf)
+    checksum = calculate_checksum(buf)
+    return struct.pack('iHH' + str(len(buf)) + 's', seq, int(bin(int(checksum, 16))[2:], 2), data_identifier, buf)
 
 
 def stop_and_wait_worker(ip, is_last_byte):
@@ -182,7 +177,7 @@ def main():
         sys.exit(1)
     f = open("../files/" + sys.argv[1], "r")
     file_contents = f.read()
-    ips = open("../files/ips.txt", "r").read().split('\n')[:3]
+    ips = open("../files/ips.txt", "r").read().split('\n')[:2]
     global mss
     mss = int(sys.argv[2])
     global port_num
