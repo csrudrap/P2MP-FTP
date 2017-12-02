@@ -3,22 +3,20 @@ import sys
 import struct
 import threading
 from threading import Timer
+import time
+from receiver import calculate_checksum
 
 receivers = {}
 mss = 0
-buf = ""
-seg_type = 0b0101010100000000
-last_seg_type = 0b0101010111111111 
+buf = ""  # Global buffer that we fill up till the MSS value before we send out.
+seg_type = 0b0101010100000000   
+last_seg_type = 0b0101010111111111  # The last segment has this data identifier.
 timer = None
 timer_expired = True
 seq = 0
 ack_identifier = 0b1010101010101010
 port_num = 65530
-
-
-def calculate_checksum():
-    # calculate checksum on buff
-    return 0b1010110101110100   # Remove this line and return something valid.
+timeout_val = 0.8
 
 
 def create_socket_and_connect():
@@ -27,6 +25,7 @@ def create_socket_and_connect():
     except Exception as e:
         print "Socket could not be created"
         sys.exit(1)
+    # Without the timeout, the socket won't stop trying to receive data if there is no data to receive.
     sock.settimeout(0.1)
     return sock
 
@@ -40,7 +39,7 @@ def ftp_init(ips):
         receivers[i] = False
     buf = ""
     timer_expired = True
-    timer = Timer(0.8, update_timer)
+    timer = Timer(timeout_val, update_timer)
     if timer.is_alive():
         timer.cancel()
     seq = 0
@@ -54,7 +53,12 @@ def build_segment(is_last_byte):
     global seg_type
     
     data_identifier = last_seg_type if is_last_byte else seg_type
-    checksum = calculate_checksum()
+    checksum_str = calculate_checksum(buf)
+    # The checksum returned is a string in Hex. First we convert to a binary string and 
+    # then to an integer (removing the '0b' from the beginning with the [2:]).
+    checksum = int(bin(int(checksum_str, 16))[2:], 2)
+    # struct.pack takes iHH as format specifiers.
+    # i: 32 bit Integer (sequence number), H: 16 bit short (checksum and data_identifier)
     return struct.pack('iHH' + str(len(buf)) + 's', seq, checksum, data_identifier, buf)
 
 
@@ -98,16 +102,18 @@ def send_data(is_last_byte):
     global timer_expired
     if timer.is_alive():
         timer.cancel()
-    timer = Timer(0.8, update_timer)
+    timer = Timer(timeout_val, update_timer)
     timer.start()
     timer_expired = False
     recv_threads = []
     for i in range(len(receivers.keys())):
+        # Only send data to receivers that haven't already sent acknowledgements for the current segment.
         if receivers[receivers.keys()[i]] == False:
             new_thread = threading.Thread(target=stop_and_wait_worker, args=(receivers.keys()[i], is_last_byte,))
             new_thread.start()
             recv_threads.append(new_thread)
     for i in recv_threads:
+        # Call join to avoid concurrency issues.
         i.join()
     for i in receivers.keys():
     # If any of the receivers haven't sent ACKs yet, return False so that this function can be called again.
@@ -115,11 +121,11 @@ def send_data(is_last_byte):
             return False
     if timer.is_alive():
         timer.cancel()
-        timer = Timer(0.8, update_timer)
+        timer = Timer(timeout_val, update_timer)
+    # All receivers have sent ACKs. Proceed to the next segment, if it exists.
     return True
 
 
-# To-Do: Doc string.
 # data: String, is_last_byte: boolean
 def stop_and_wait(data, is_last_byte):
     global buf
@@ -144,6 +150,7 @@ def prepare_next_segment():
     global buf
     global timer
     global receivers
+    # Clear globals to start processing the next segment.
     buf = ""
     if timer.is_alive():
         timer.cancel()
@@ -180,13 +187,13 @@ def main():
         sys.exit(1)
     f = open("../files/" + sys.argv[1], "r")
     file_contents = f.read()
+    # Read the receiver IP addresses from a file. Split and ignore the last line.
     ips = open("../files/ips.txt", "r").read().split('\n')[:-1]
     global mss
     mss = int(sys.argv[2])
     global port_num
     port_num = int(sys.argv[3])
     rdt_send(file_contents, ips)
-    
     
 if __name__ == "__main__":
     main()

@@ -7,9 +7,9 @@ import os
 import sys
 
 cur_seq = -1 # is a global value which keeps record of the current seq num to prevent out-of-order packets.
-BUFFER_SIZE = 8192 # Arbitrarily chosen maximum limit.
+buffer_size = 8192 # Arbitrarily chosen maximum limit.
 buf = ""
-
+header_len = 8
 
 def build_segment_ack(data):
     seqNum = data[0]
@@ -18,44 +18,40 @@ def build_segment_ack(data):
     return struct.pack('iHH', seqNum, dataACK, packetType)
 
 
-def carry_around_add(a, b):
-    c = a + b
-    return (c & 0xffff) + (c >> 16)
+def verify_checksum(s):
+    # The checksum returned is a string in Hex. First we convert to a binary string and
+    # then to an integer (removing the '0b' from the beginning with the [2:]).
+    # s[3] is the data portion of the received segment.
+    return int(bin(int(calculate_checksum(s[3]), 16))[2:], 2) == s[1]
 
 
-def verify_checksum(msg):
-    # Referred from stackoverflow.
-    return True
-    s = 0
-    for i in range(0, len(msg), 2):
-        w = ord(msg[i]) + (ord(msg[i+1]) << 8)
-        s = carry_around_add(s, w)
-    if (~s & 0xffff) == 0x0000:
+# Following https://stackoverflow.com/questions/16822967/need-assistance-in-calculating-checksum
+# Modified to get a 16-bit checksum.
+def calculate_checksum(s):
+    """
+    Calculates checksum for sending commands to the ELKM1.
+    Sums the ASCII character values mod256 and returns
+    the lower byte of the two's complement of that value.
+    """
+    return '%4X' % (-(sum(ord(c) for c in s) % 65536) & 0xFFFF)
+
+
+def drop_segment(data, p): # drop packet according to a probability p - here p is between 0 and 1
+    r = random.uniform(0, 1)
+    # r is random between 0 and 1. p is also between 0 and 1.
+    # Drop the segment if r happens to be less than p. Else retain the segment.
+    # If p is high, there is a good chance this will happen a lot.
+    if r <= p:
+        print "Packet loss, sequence number = {}".format(data[0])
         return True
     else:
         return False
 
 
-#data = data.split()
-#data = map(lambda x: int(x,16), data)
-#data = struct.pack("%dB" % len(data), *data)
-
-#print ' '.join('%02X' % ord(x) for x in data)
-#print "Checksum: 0x%04x" % calculateChecksum(data)
-
-def dropSegment(data, p): # drop packet according to a probability p - here p is between 0 and 1
-    r = random.uniform(0, 1)
-    if r <= p:
-        print "Packet loss, sequence number = {}".format(data[0])
-        return True # drop packet
-    else:
-        return False # retain the packet
-
-
 def create_and_bind_socket(port):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    except Exception as e: # Change this line.
+    except Exception as e:
         print "Socket could not be created", e
         sys.exit(1)
     if sock == None:
@@ -83,15 +79,23 @@ def shutdown_and_close(sock):
     except Exception as e:
         print e.message, "Couldn't close the socket"
 
-
+# sock: socket object
 def process_data(sock, raw_data, p, addr):
     global cur_seq
+    global header_len
     # Header length is 4 + 2 + 2 = 8
-    n = len(raw_data) - 8
-    data = struct.unpack('iHH' + str(n) + 's', raw_data) # data is a tuple
-    if not dropSegment(data, p):
+    n = len(raw_data) - header_len
+    data = struct.unpack('iHH' + str(n) + 's', raw_data)
+    # data is a tuple with 4 entries: an int (seq num), 2 shorts (checksum and identifier)
+    # and a string corresponding to the data being sent by the sender.
+    if sock is None:
+        print "Socket is None, discarding the segment."
+        return False
+    if not drop_segment(data, p):
         # Retain the segment, process it.
-        # Check if data has 4 fields at least.
+        if len(data) < 4:
+            # The tuple must have 4 entries.
+            return False
         print "SEQ RECVD IS: ", data[0]
         if data[0] != cur_seq + 1:
             print "Segment received not in sequence for seq number {}".format(data[0])
@@ -101,6 +105,7 @@ def process_data(sock, raw_data, p, addr):
                 print "Checksum invalid, discarding segment for seq number {}".format(data[0])
                 return False
             else:
+                # The segment is valid, extract data and append to file. Send ACK.
                 append_to_file(data[3])
                 seg = build_segment_ack(data)
                 sock.sendto(build_segment_ack(data), addr)
@@ -118,12 +123,10 @@ def append_to_file(data):
 def ftp_recv(port, p):
     sock = create_and_bind_socket(port)
     while True:
-        # BUFFER_SIZE is the maximum limit on the size of the segment that the server will receive.
-        data, addr = sock.recvfrom(BUFFER_SIZE)
-        # print "Got connection from: %s", addr
+        # buffer_size is the maximum limit on the size of the segment that the server will receive.
+        data, addr = sock.recvfrom(buffer_size)
         if not data:
             continue
-        #print "Received data:%s", data
         ret = process_data(sock, data, p, addr)
         # ret is True only when the segment is processed correctly and ACK is sent out.
         if is_last_segment(data) and ret:
