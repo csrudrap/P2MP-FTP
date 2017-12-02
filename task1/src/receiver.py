@@ -18,28 +18,8 @@ def build_segment_ack(data):
     return struct.pack('iHH', seqNum, dataACK, packetType)
 
 
-def carry_around_add(a, b):
-    c = a + b
-    return (c & 0xffff) + (c >> 16)
-
-
 def verify_checksum(s):
-    #print int(bin(int(calculate_checksum(s[3]), 16))[2:], 2), type(calculate_checksum(s[3]))
-    #print s[1], type(s[1])
     return int(bin(int(calculate_checksum(s[3]), 16))[2:], 2) == s[1]
-    #return calculate_checksum(s[3]) == s[1]
-
-
-    # Referred from stackoverflow.
-    #return True
-    #s = 0
-    #for i in range(0, len(msg), 2):
-    #    w = ord(msg[i]) + (ord(msg[i+1]) << 8)
-    #    s = carry_around_add(s, w)
-    #if (~s & 0xffff) == 0x0000:
-    #    return True
-    #else:
-    #    return False
 
 
 # Obtained from https://stackoverflow.com/questions/16822967/need-assistance-in-calculating-checksum
