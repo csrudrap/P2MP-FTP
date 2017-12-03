@@ -25,14 +25,11 @@ def verify_checksum(s):
     return int(bin(int(calculate_checksum(s[3]), 16))[2:], 2) == s[1]
 
 
-# Following https://stackoverflow.com/questions/16822967/need-assistance-in-calculating-checksum
-# Modified to get a 16-bit checksum.
 def calculate_checksum(s):
-    """
-    Calculates checksum for sending commands to the ELKM1.
-    Sums the ASCII character values mod256 and returns
-    the lower byte of the two's complement of that value.
-    """
+    # Following https://stackoverflow.com/questions/16822967/need-assistance-in-calculating-checksum
+    # Modified to get a 16-bit checksum.
+    # Sums the ASCII character values mod 65536 and returns
+    # the lower 2 bytes of the two's complement of that value.
     return '%4X' % (-(sum(ord(c) for c in s) % 65536) & 0xFFFF)
 
 
