@@ -94,7 +94,7 @@ def process_data(sock, raw_data, p, addr):
             # The tuple must have 4 entries.
             return False
         print "SEQ RECVD IS: ", data[0]
-        if data[0] != cur_seq + 1:
+        if data[0] > cur_seq + 1:
             print "Segment received not in sequence for seq number {}".format(data[0])
             return False
         else:
